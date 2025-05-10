@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "swiftopenai",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SwiftBeta/SwiftOpenAI.git",
+      "state" : {
+        "revision" : "b316788cf0e6584cc730d8231112dd2c76458713",
+        "version" : "1.9.0"
+      }
+    }
+  ],
+  "version" : 2
+}
