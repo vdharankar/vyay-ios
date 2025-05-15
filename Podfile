@@ -13,13 +13,20 @@ use_frameworks!
     pod 'SideMenu'
     # Add the Firebase pod for Google Analytics
     pod 'FirebaseAnalytics'
+    pod 'Instructions', '~> 2.3.0'
+    
+end
 
-    # For Analytics without IDFA collection capability, use this pod instead
-    # pod ‘Firebase/AnalyticsWithoutAdIdSupport’
-
-    # Add the pods for any other Firebase products you want to use in your app
-    # For example, to use Firebase Authentication and Cloud Firestore
-    pod 'FirebaseAuth'
-    pod 'FirebaseFirestore'
-
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    if target.name == 'BoringSSL-GRPC'
+      target.source_build_phase.files.each do |file|
+        if file.settings && file.settings['COMPILER_FLAGS']
+          flags = file.settings['COMPILER_FLAGS'].split
+          flags.reject! { |flag| flag == '-GCC_WARN_INHIBIT_ALL_WARNINGS' }
+          file.settings['COMPILER_FLAGS'] = flags.join(' ')
+        end
+      end
+    end
+  end
 end
