@@ -25,6 +25,7 @@
 		09671F022C2CA08F0098ECE8 /* RoundedLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09671F012C2CA08F0098ECE8 /* RoundedLabel.swift */; };
 		09671F042C52D6E20098ECE8 /* ExpenseItemCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09671F032C52D6E10098ECE8 /* ExpenseItemCell.swift */; };
 		09671F062C52E3D80098ECE8 /* ExpenseItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09671F052C52E3D80098ECE8 /* ExpenseItem.swift */; };
+		097B3FD02DD283C5006ECD4E /* PrivacyPolicyViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 097B3FCF2DD283C5006ECD4E /* PrivacyPolicyViewController.swift */; };
 		09BD4A3F2DC7D24B00579C99 /* SwiftOpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = 09BD4A3E2DC7D24B00579C99 /* SwiftOpenAI */; };
 		09BD4A412DC7D3B200579C99 /* Config.plist in Resources */ = {isa = PBXBuildFile; fileRef = 09BD4A402DC7D3B200579C99 /* Config.plist */; };
 		09BD4A452DC953ED00579C99 /* EditExpenseViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09BD4A442DC953ED00579C99 /* EditExpenseViewController.swift */; };
@@ -70,6 +71,7 @@
 		09671F012C2CA08F0098ECE8 /* RoundedLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundedLabel.swift; sourceTree = "<group>"; };
 		09671F032C52D6E10098ECE8 /* ExpenseItemCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpenseItemCell.swift; sourceTree = "<group>"; };
 		09671F052C52E3D80098ECE8 /* ExpenseItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpenseItem.swift; sourceTree = "<group>"; };
+		097B3FCF2DD283C5006ECD4E /* PrivacyPolicyViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyPolicyViewController.swift; sourceTree = "<group>"; };
 		09BD4A402DC7D3B200579C99 /* Config.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Config.plist; sourceTree = "<group>"; };
 		09BD4A442DC953ED00579C99 /* EditExpenseViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EditExpenseViewController.swift; sourceTree = "<group>"; };
 		09E6E9242DC5803A002831B4 /* data.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = data.xcdatamodel; sourceTree = "<group>"; };
@@ -143,6 +145,7 @@
 		095DF8762C10EA6F009C8117 /* vyay */ = {
 			isa = PBXGroup;
 			children = (
+				097B3FCF2DD283C5006ECD4E /* PrivacyPolicyViewController.swift */,
 				09454A2C2DCE97E100A57DE9 /* SettingsViewController.swift */,
 				09454A2A2DCA962200A57DE9 /* DatePickerBottomSheetViewController.swift */,
 				09454A252DC9F78A00A57DE9 /* CategoriesBottomSheetViewController.swift */,
@@ -282,9 +285,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-vyay/Pods-vyay-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-vyay/Pods-vyay-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -347,6 +354,7 @@
 				09671F042C52D6E20098ECE8 /* ExpenseItemCell.swift in Sources */,
 				09BD4A452DC953ED00579C99 /* EditExpenseViewController.swift in Sources */,
 				09454A2B2DCA962200A57DE9 /* DatePickerBottomSheetViewController.swift in Sources */,
+				097B3FD02DD283C5006ECD4E /* PrivacyPolicyViewController.swift in Sources */,
 				09E6E9442DC627EE002831B4 /* Expense+CoreDataProperties copy.swift in Sources */,
 				09E6E9412DC62687002831B4 /* Categories+CoreDataClass copy.swift in Sources */,
 			);
@@ -500,11 +508,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = F54SSP5849;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = vyay/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Vyay - AI Expense Tracker";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
@@ -514,12 +524,16 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.51;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vyayapp.vyay;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -530,11 +544,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = F54SSP5849;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = vyay/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Vyay - AI Expense Tracker";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
@@ -544,12 +560,16 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.51;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vyayapp.vyay;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};

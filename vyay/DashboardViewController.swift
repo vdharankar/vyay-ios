@@ -9,6 +9,7 @@ import UIKit
 import SideMenu
 import CoreData // Add this to use Core Data entities
 import SwiftOpenAI
+import Instructions
 
 class DashboardViewController: UIViewController, UITableViewDelegate, UITableViewDataSource, MenuViewControllerDelegate, UITextFieldDelegate {
    
@@ -35,7 +36,8 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
     var selectedList: Lists?
     var selectedExpense: Expense?
     
-    private let selectedListKey = "selectedListName"
+    private let hasSeenTourKey = "hasSeenTour" // Add key for tracking tour status
+    private let selectedListKey = "selectedListName" // Move this back inside the class
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "dd MMM yyyy"
@@ -44,6 +46,8 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
     
     private var originalTableViewBottomConstraint: CGFloat = 0
     private var originalInputViewBottomConstraint: CGFloat = 0
+    
+    let coachMarksController = CoachMarksController()
     
     struct Config {
         // Static variable to access the OpenAI API key.
@@ -70,29 +74,6 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
         }
     }
     
-    func menuDidUpdateLists(selectedListDeleted: Bool) {
-        menuDidClose()
-    }
-
-    private func getDefaultList() -> Lists? {
-        let lists = ListsManager.shared.fetchAllLists()
-        return lists.first { $0.name == "All Expenses" }
-    }
-    
-    private func saveSelectedList(_ list: Lists) {
-        if let listName = list.name {
-            UserDefaults.standard.set(listName, forKey: selectedListKey)
-        }
-    }
-    
-    private func loadSavedList() -> Lists? {
-        if let savedListName = UserDefaults.standard.string(forKey: selectedListKey) {
-            let lists = ListsManager.shared.fetchAllLists()
-            return lists.first { $0.name == savedListName }
-        }
-        return nil
-    }
-    
     override func viewDidLoad() {
         super.viewDidLoad()
         print("DashboardViewController viewDidLoad started")
@@ -100,10 +81,6 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
         // Store original constraint values
         originalTableViewBottomConstraint = expTableViewBottomConstraint.constant
         originalInputViewBottomConstraint = expInputViewBottomConstraint.constant
-        
-        // Add keyboard observers
-        NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillShow), name: UIResponder.keyboardWillShowNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillHide), name: UIResponder.keyboardWillHideNotification, object: nil)
         
         // Set return key as Done and set delegate
         expTextField.returnKeyType = .done
@@ -125,20 +102,31 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
         addExpImageView.isUserInteractionEnabled = true
         addExpImageView.addGestureRecognizer(tapGesture)
         
-        dates = getAllDates(ofYear: 2025)
-        selectedDate = Date() // Set today's date as selected
-        dateLabel.text = dateFormatter.string(from: selectedDate)
+        // Get today's date and set it as selected
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        selectedDate = today
+        print("Setting selected date to: \(dateFormatter.string(from: today))")
+        dateLabel.text = dateFormatter.string(from: today)
         
-        if let layout = dateScroller.collectionViewLayout as? UICollectionViewFlowLayout {
-            layout.scrollDirection = .horizontal
-            layout.minimumInteritemSpacing = 0
-            layout.minimumLineSpacing = 0
+        // Generate dates for the current year
+        let currentYear = calendar.component(.year, from: today)
+        print("Generating dates for year: \(currentYear)")
+        dates = getAllDates(ofYear: currentYear)
+        
+        // Configure collection view layouts
+        if let dateLayout = dateScroller.collectionViewLayout as? UICollectionViewFlowLayout {
+            dateLayout.scrollDirection = .horizontal
+            dateLayout.minimumInteritemSpacing = 0
+            dateLayout.minimumLineSpacing = 0
+            dateLayout.estimatedItemSize = UICollectionViewFlowLayout.automaticSize
         }
         
-        if let layout = dayScroller.collectionViewLayout as? UICollectionViewFlowLayout {
-            layout.scrollDirection = .horizontal
-            layout.minimumInteritemSpacing = 0
-            layout.minimumLineSpacing = 0
+        if let dayLayout = dayScroller.collectionViewLayout as? UICollectionViewFlowLayout {
+            dayLayout.scrollDirection = .horizontal
+            dayLayout.minimumInteritemSpacing = 0
+            dayLayout.minimumLineSpacing = 0
+            dayLayout.estimatedItemSize = UICollectionViewFlowLayout.automaticSize
         }
         
         // Force layout update for collection views
@@ -146,29 +134,25 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
         dayScroller.layoutIfNeeded()
         
         // Scroll to today's date
-        if let todayIndex = findDateIndex(selectedDate) {
+        if let todayIndex = findDateIndex(today) {
+            print("Scrolling date scroller to index: \(todayIndex)")
             let indexPath = IndexPath(item: todayIndex, section: 0)
-            dateScroller.scrollToItem(at: indexPath, at: .centeredHorizontally, animated: false)
-            print("Scrolled date scroller to index: \(todayIndex)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.dateScroller.scrollToItem(at: indexPath, at: .centeredHorizontally, animated: false)
+                self.dateScroller.reloadData()
+            }
         }
         
         // Scroll day scroller to current day
-        let calendar = Calendar.current
-        let today = calendar.component(.weekday, from: Date())
-        print("Current weekday from calendar: \(today)") // 1 = Sunday, 7 = Saturday
-        
-        // Our days array is ["S","M","T","W","T","F","S"]
-        // So we need to map Calendar.weekday (1-7) to our array index (0-6)
-        let dayIndex = today - 1
-        print("Calculated day index: \(dayIndex)")
-        
-        // Verify the index is within bounds
+        let weekday = calendar.component(.weekday, from: today)
+        let dayIndex = weekday - 1
         if dayIndex >= 0 && dayIndex < 7 {
             let dayIndexPath = IndexPath(item: dayIndex, section: 0)
             print("Scrolling day scroller to index: \(dayIndex)")
-            dayScroller.scrollToItem(at: dayIndexPath, at: .centeredHorizontally, animated: false)
-        } else {
-            print("Invalid day index: \(dayIndex)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.dayScroller.scrollToItem(at: dayIndexPath, at: .centeredHorizontally, animated: false)
+                self.dayScroller.reloadData()
+            }
         }
         
         // config view container for list combo
@@ -210,6 +194,37 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
         fetchExpenses()
         setupListViewTapGesture()
         print("DashboardViewController viewDidLoad completed")
+        
+        coachMarksController.dataSource = self
+        coachMarksController.delegate = self
+        
+        // Configure a simple semi-transparent gray overlay
+        coachMarksController.overlay.backgroundColor = UIColor.gray.withAlphaComponent(0.3)
+        coachMarksController.overlay.blurEffectStyle = nil
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Add keyboard observers
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(keyboardWillShow),
+            name: UIResponder.keyboardWillShowNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(keyboardWillHide),
+            name: UIResponder.keyboardWillHideNotification,
+            object: nil
+        )
+        
+        // Show the tour only if user hasn't seen it before
+        if !UserDefaults.standard.bool(forKey: hasSeenTourKey) {
+            coachMarksController.start(in: .window(over: self))
+            // Mark that user has seen the tour
+            UserDefaults.standard.set(true, forKey: hasSeenTourKey)
+        }
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -252,6 +267,14 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         NotificationCenter.default.removeObserver(self)
+        expTextField.resignFirstResponder()
+        
+        UIView.animate(withDuration: 0.5) {
+            // Only adjust the bottom constraints
+            self.expInputViewBottomConstraint.constant = self.originalInputViewBottomConstraint
+            self.expTableViewBottomConstraint.constant = self.originalTableViewBottomConstraint
+            self.view.layoutIfNeeded()
+        }
     }
 
     private func setupListViewTapGesture() {
@@ -368,25 +391,47 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
         // Create the start date for the given year
         let startComponents = DateComponents(year: year, month: 1, day: 1)
         guard let startDate = calendar.date(from: startComponents) else {
+            print("Failed to create start date for year \(year)")
             return dates
         }
 
+        // Get the weekday of January 1st (1 = Sunday, 2 = Monday, etc.)
+        let firstWeekday = calendar.component(.weekday, from: startDate)
+        
+        // Calculate how many days we need to go back to reach the previous Sunday
+        let daysToSubtract = firstWeekday - 1 // If firstWeekday is 1 (Sunday), we don't need to go back
+        
+        // Create a date for the previous year's last Sunday
+        guard let previousSunday = calendar.date(byAdding: .day, value: -daysToSubtract, to: startDate) else {
+            print("Failed to calculate previous Sunday")
+            return dates
+        }
+        
         // Create the end date for the given year
         let endComponents = DateComponents(year: year + 1, month: 1, day: 1)
         guard let endDate = calendar.date(from: endComponents) else {
+            print("Failed to create end date for year \(year)")
             return dates
         }
 
-        // Calculate the number of days between start date and end date
-        let numberOfDays = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+        // Calculate the number of days between previous Sunday and end date
+        let numberOfDays = calendar.dateComponents([.day], from: previousSunday, to: endDate).day ?? 0
+        print("Generating \(numberOfDays) dates starting from: \(dateFormatter.string(from: previousSunday))")
 
-        // Iterate through each day of the year
+        // Iterate through each day from previous Sunday to end of year
         for day in 0..<numberOfDays {
-            if let date = calendar.date(byAdding: .day, value: day, to: startDate) {
+            if let date = calendar.date(byAdding: .day, value: day, to: previousSunday) {
                 dates.append(date)
             }
         }
 
+        print("Generated \(dates.count) dates")
+        if let firstDate = dates.first {
+            print("First date: \(dateFormatter.string(from: firstDate))")
+        }
+        if let lastDate = dates.last {
+            print("Last date: \(dateFormatter.string(from: lastDate))")
+        }
         return dates
     }
 
@@ -431,11 +476,14 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
                 print("- \(list.name ?? "unnamed")")
             }
             
+            // Get today's date for dummy expenses
+            let today = Date()
+            
             // Add expenses and store the results
             let exp1 = ExpenseManager.shared.addExpense(
                 details: "Pizza",
-                amount: NSDecimalNumber(value: 12.5),
-                date: Date(),
+                amount: NSDecimalNumber(value: 255.0),
+                date: today,
                 catId: categories[0].id!,
                 list: lists[0].name ?? ""
             )
@@ -443,8 +491,8 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
             
             let exp2 = ExpenseManager.shared.addExpense(
                 details: "Coffee",
-                amount: NSDecimalNumber(value: 3.0),
-                date: Date(),
+                amount: NSDecimalNumber(value: 100.0),
+                date: today,
                 catId: categories[0].id!,
                 list: lists[0].name ?? ""
             )
@@ -452,8 +500,8 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
             
             let exp3 = ExpenseManager.shared.addExpense(
                 details: "Bus Ticket",
-                amount: NSDecimalNumber(value: 2.75),
-                date: Date(),
+                amount: NSDecimalNumber(value: 25.0),
+                date: today,
                 catId: categories[1].id!,
                 list: lists[1].name ?? ""
             )
@@ -461,8 +509,8 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
             
             let exp4 = ExpenseManager.shared.addExpense(
                 details: "T-shirt",
-                amount: NSDecimalNumber(value: 25.0),
-                date: Date(),
+                amount: NSDecimalNumber(value: 450.0),
+                date: today,
                 catId: categories[2].id!,
                 list: lists[1].name ?? ""
             )
@@ -484,10 +532,23 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
 
     func addDummyListsIfNeeded() {
         let existing = ListsManager.shared.fetchAllLists()
+        print("Checking for default lists...")
+        
+        // Check if "All Expenses" exists
+        let hasDefaultList = existing.contains { $0.name == "All Expenses" }
+        
+        if !hasDefaultList {
+            print("Creating default 'All Expenses' list...")
+            _ = ListsManager.shared.addList(name: "All Expenses", total: 0)
+        }
+        
+        // Only add example lists if there are no lists at all
         if existing.isEmpty {
+            print("Adding example lists...")
             _ = ListsManager.shared.addList(name: "Personal", total: 0)
             _ = ListsManager.shared.addList(name: "Work", total: 0)
         }
+        
         print("Lists in DB:", ListsManager.shared.fetchAllLists().map { $0.name ?? "" })
     }
 
@@ -501,13 +562,30 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
                 editVC.expense = selectedExpense
                 editVC.delegate = self
             }
+        } else if segue.identifier == "ShowSettingsSegue" {
+            // Handle settings button tap
+            if let settingsVC = segue.destination as? UINavigationController {
+                // Add a button to show privacy policy
+                let privacyButton = UIBarButtonItem(
+                    title: "Privacy Policy",
+                    style: .plain,
+                    target: self,
+                    action: #selector(showPrivacyPolicy)
+                )
+                privacyButton.tintColor = UIColor(rgb: 0x662CAA)
+                settingsVC.topViewController?.navigationItem.rightBarButtonItem = privacyButton
+            }
         }
     }
     
     // Find index of a date in the dates array
     private func findDateIndex(_ date: Date) -> Int? {
         let calendar = Calendar.current
-        return dates.firstIndex { calendar.isDate($0, inSameDayAs: date) }
+        let normalizedDate = calendar.startOfDay(for: date)
+        let index = dates.firstIndex { calendar.isDate($0, inSameDayAs: normalizedDate) }
+        print("Finding index for date: \(dateFormatter.string(from: date))")
+        print("Found index: \(index ?? -1)")
+        return index
     }
     
     // MARK: - MenuViewControllerDelegate
@@ -519,63 +597,10 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
         fetchExpenses()
     }
 
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        selectedExpense = expenseList[indexPath.row]
-        tableView.deselectRow(at: indexPath, animated: true)
-        performSegue(withIdentifier: "SegueEdit", sender: self)
-    }
-
-    @objc private func keyboardWillShow(notification: NSNotification) {
-        print("keyboardWillShow called")
-        guard let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { 
-            print("keyboardFrame not found in notification")
-            return 
-        }
-        let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-        let safeAreaBottom = view.safeAreaInsets.bottom
-        let adjustedKeyboardHeight = keyboardFrame.height - safeAreaBottom
-        print("Keyboard frame: \(keyboardFrame), safeAreaBottom: \(safeAreaBottom), adjusted: \(adjustedKeyboardHeight)")
-        UIView.animate(withDuration: duration) {
-            self.expInputViewBottomConstraint.constant = adjustedKeyboardHeight
-            print("Set expInputViewBottomConstraint.constant to \(self.expInputViewBottomConstraint.constant)")
-            self.view.layoutIfNeeded()
-        }
+    func menuDidUpdateLists(selectedListDeleted: Bool) {
+        menuDidClose()
     }
     
-    @objc private func keyboardWillHide(notification: NSNotification) {
-        print("keyboardWillHide called")
-        let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-        UIView.animate(withDuration: duration) {
-            self.expInputViewBottomConstraint.constant = self.originalInputViewBottomConstraint
-            print("Reset expInputViewBottomConstraint.constant to \(self.expInputViewBottomConstraint.constant)")
-            self.view.layoutIfNeeded()
-        }
-    }
-
-    // MARK: - UITableView Editing (Swipe to Delete with Confirmation)
-    func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        if editingStyle == .delete {
-            let expenseToDelete = expenseList[indexPath.row]
-            let alert = UIAlertController(
-                title: "Delete Expense",
-                message: "Are you sure you want to delete this expense?",
-                preferredStyle: .alert
-            )
-            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
-            alert.addAction(UIAlertAction(title: "Delete", style: .destructive, handler: { _ in
-                // Remove from Core Data (or your data source)
-                ExpenseManager.shared.deleteExpense(expense: expenseToDelete)
-                // Remove from local array
-                self.expenseList.remove(at: indexPath.row)
-                // Delete the row from the table view
-                tableView.deleteRows(at: [indexPath], with: .automatic)
-                // Optionally, update totals or UI
-                self.fetchExpenses()
-            }))
-            present(alert, animated: true)
-        }
-    }
-
     func menuDidClose() {
         let lists = ListsManager.shared.fetchAllLists()
         if let selected = selectedList, lists.contains(where: { $0.objectID == selected.objectID }) {
@@ -598,87 +623,67 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
             }
         }
     }
-}
 
-extension DashboardViewController : UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
-
-    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        
-        if(collectionView == dateScroller){
-            return 365
-        }
-            else {
-                return 7
-        }
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        selectedExpense = expenseList[indexPath.row]
+        tableView.deselectRow(at: indexPath, animated: true)
+        performSegue(withIdentifier: "SegueEdit", sender: self)
     }
 
-    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        
-        if(collectionView == dateScroller) {
-            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "DateCell", for: indexPath) as! DateCollectionViewCell
-            
-            let date = dates[indexPath.item]
-            
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "dd"
-            cell.dateLabel.text = dateFormatter.string(from: date)
-            dateFormatter.dateFormat = "E"
-            
-            let day = dateFormatter.string(from: date);
-            let selectedDay = dateFormatter.string(from: selectedDate)
-            
-            if(selectedDay != day ) {
-                cell.dateLabel.layer.borderColor = UIColor.clear.cgColor
-            }
-            else {
-                cell.dateLabel.layer.borderColor = UIColor(rgb:0x662CAA).cgColor
-            }
-            
-            return cell
+    @objc private func keyboardWillShow(notification: NSNotification) {
+        guard let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+              let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double else {
+            return
         }
-        else {
-            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "DayCell", for: indexPath) as! DateCollectionViewCell
-            
-            let day = days[indexPath.item]
-            cell.dayLabel.text = day
-            
-            return cell
+
+        let safeAreaBottom = view.safeAreaInsets.bottom
+        let adjustedKeyboardHeight = keyboardFrame.height - safeAreaBottom
+        
+        UIView.animate(withDuration: duration) {
+            // Only adjust the bottom constraints
+            self.expInputViewBottomConstraint.constant = adjustedKeyboardHeight
+            self.view.layoutIfNeeded()
         }
     }
     
-   
-    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        if collectionView == dateScroller {
-            selectedDate = dates[indexPath.item]
-            dateScroller.reloadData()
-            print("Selected date: \(selectedDate)")
-            dateLabel.text = dateFormatter.string(from: selectedDate)
-            
-            // Refresh expenses for the new date
-            fetchExpenses()
+    @objc private func keyboardWillHide(notification: NSNotification) {
+        guard let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double else {
+            return
         }
-    }
-    
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
-            let cellWidth = collectionView.bounds.width / 7  // Show 7 days at a time
-            print("Setting cell size to: \(cellWidth)x\(collectionView.bounds.height)")  // Debugging output
-            return CGSize(width: cellWidth, height: collectionView.bounds.height)
-    }
-    
-    func normalizeDate(_ date: Date) -> Date? {
-        let calendar = Calendar.current
-        return calendar.date(from: calendar.dateComponents([.year, .month, .day], from: date))
+        
+        UIView.animate(withDuration: duration) {
+            // Only adjust the bottom constraints
+            self.expInputViewBottomConstraint.constant = self.originalInputViewBottomConstraint
+            self.expTableViewBottomConstraint.constant = self.originalTableViewBottomConstraint
+            self.view.layoutIfNeeded()
+        }
     }
 
-    // Function to compare two dates for equality excluding time
-    func areDatesEqualExcludingTime(_ date1: Date, _ date2: Date) -> Bool {
-        guard let normalizedDate1 = normalizeDate(date1), let normalizedDate2 = normalizeDate(date2) else {
-            return false
-        }
-        return normalizedDate1 == normalizedDate2
-    }
-    func runAI(text:String) async {
+    @objc private func showPrivacyPolicy() {
+        let privacyVC = PrivacyPolicyViewController()
+        let navController = UINavigationController(rootViewController: privacyVC)
         
+        // Add a close button
+        let closeButton = UIBarButtonItem(
+            barButtonSystemItem: .close,
+            target: self,
+            action: #selector(dismissPrivacyPolicy)
+        )
+        closeButton.tintColor = UIColor(rgb: 0x662CAA)
+        privacyVC.navigationItem.leftBarButtonItem = closeButton
+        
+        // Set the title
+        privacyVC.title = "Privacy Policy"
+        
+        // Present the privacy policy
+        present(navController, animated: true)
+    }
+    
+    @objc private func dismissPrivacyPolicy() {
+        dismiss(animated: true)
+    }
+
+    func runAI(text: String) async {
         var chat = "\(text) - identify category of expense,cost,item in response precisely with comma separated string format, keep all words small letters, dont add currency symbol , return result as a perfect JSON, all JSON keys should be string"
         
         var openAI = SwiftOpenAI(apiKey: Config.openAIKey)
@@ -790,12 +795,123 @@ extension DashboardViewController : UICollectionViewDataSource, UICollectionView
         }
     }
 
+    // MARK: - UITableView Editing (Swipe to Delete with Confirmation)
+    func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
+        if editingStyle == .delete {
+            let expenseToDelete = expenseList[indexPath.row]
+            let alert = UIAlertController(
+                title: "Delete Expense",
+                message: "Are you sure you want to delete this expense?",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+            alert.addAction(UIAlertAction(title: "Delete", style: .destructive, handler: { _ in
+                // Remove from Core Data (or your data source)
+                ExpenseManager.shared.deleteExpense(expense: expenseToDelete)
+                // Remove from local array
+                self.expenseList.remove(at: indexPath.row)
+                // Delete the row from the table view
+                tableView.deleteRows(at: [indexPath], with: .automatic)
+                // Optionally, update totals or UI
+                self.fetchExpenses()
+            }))
+            present(alert, animated: true)
+        }
+    }
+}
+
+extension DashboardViewController : UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        if collectionView == dateScroller {
+            print("Date scroller items count: \(dates.count)")
+            return dates.count
+        } else {
+            print("Day scroller items count: \(days.count)")
+            return days.count
+        }
+    }
+
+    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        if collectionView == dateScroller {
+            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "DateCell", for: indexPath) as! DateCollectionViewCell
+            
+            let date = dates[indexPath.item]
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd"
+            cell.dateLabel.text = dateFormatter.string(from: date)
+            
+            // Check if this date is today
+            let calendar = Calendar.current
+            let isToday = calendar.isDateInToday(date)
+            let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
+            
+            if isToday {
+                cell.dateLabel.layer.borderWidth = 2
+                cell.dateLabel.layer.borderColor = UIColor(rgb:0x662CAA).cgColor
+                cell.dateLabel.backgroundColor = UIColor(rgb:0x662CAA).withAlphaComponent(0.1)
+            } else if isSelected {
+                cell.dateLabel.layer.borderWidth = 1
+                cell.dateLabel.layer.borderColor = UIColor(rgb:0x662CAA).cgColor
+                cell.dateLabel.backgroundColor = .clear
+            } else {
+                cell.dateLabel.layer.borderWidth = 0
+                cell.dateLabel.layer.borderColor = UIColor.clear.cgColor
+                cell.dateLabel.backgroundColor = .clear
+            }
+            
+            print("Date cell at \(indexPath.item): \(dateFormatter.string(from: date)), isToday: \(isToday), isSelected: \(isSelected)")
+            return cell
+        } else {
+            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "DayCell", for: indexPath) as! DateCollectionViewCell
+            
+            let day = days[indexPath.item]
+            cell.dayLabel.text = day
+            
+            // Highlight current day
+            let calendar = Calendar.current
+            let today = calendar.component(.weekday, from: Date())
+            let isCurrentDay = (indexPath.item + 1) == today
+            
+            if isCurrentDay {
+                cell.dayLabel.textColor = UIColor(rgb:0x662CAA)
+                cell.dayLabel.font = UIFont.boldSystemFont(ofSize: cell.dayLabel.font.pointSize)
+            } else {
+                cell.dayLabel.textColor = .black
+                cell.dayLabel.font = UIFont.systemFont(ofSize: cell.dayLabel.font.pointSize)
+            }
+            
+            print("Day cell at \(indexPath.item): \(day), isCurrentDay: \(isCurrentDay)")
+            return cell
+        }
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
+        let cellWidth = collectionView.bounds.width / 7  // Show 7 days at a time
+        print("Setting cell size to: \(cellWidth)x\(collectionView.bounds.height)")
+        return CGSize(width: cellWidth, height: collectionView.bounds.height)
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        if collectionView == dateScroller {
+            selectedDate = dates[indexPath.item]
+            print("Selected date: \(dateFormatter.string(from: selectedDate))")
+            dateScroller.reloadData()
+            dateLabel.text = dateFormatter.string(from: selectedDate)
+            fetchExpenses()
+        }
+    }
+    
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         if scrollView == dateScroller {
-            let centerPoint = view.convert(dateScroller.center, to: dateScroller)
+            let centerPoint = CGPoint(x: scrollView.center.x + scrollView.contentOffset.x, y: scrollView.center.y)
             if let indexPath = dateScroller.indexPathForItem(at: centerPoint) {
                 let centerDate = dates[indexPath.item]
-                dateLabel.text = dateFormatter.string(from: centerDate)
+                if !Calendar.current.isDate(centerDate, inSameDayAs: selectedDate) {
+                    selectedDate = centerDate
+                    dateLabel.text = dateFormatter.string(from: centerDate)
+                    print("Scrolled to date: \(dateFormatter.string(from: centerDate))")
+                    fetchExpenses()
+                }
             }
         }
     }
@@ -822,5 +938,158 @@ extension DashboardViewController: EditExpenseViewControllerDelegate {
     func didUpdateExpense() {
         fetchExpenses()
     }
+}
+
+// MARK: - Instructions Guided Tour
+extension DashboardViewController: CoachMarksControllerDataSource, CoachMarksControllerDelegate {
+    func numberOfCoachMarks(for coachMarksController: CoachMarksController) -> Int {
+        return 6 // Now showing 6 coach marks including the menu icon
+    }
+
+    func coachMarksController(_ coachMarksController: CoachMarksController, coachMarkAt index: Int) -> CoachMark {
+        var coachMark = CoachMark()
+        
+        switch index {
+        case 0:
+            // List view coach mark
+            coachMark = coachMarksController.helper.makeCoachMark(
+                for: listView,
+                cutoutPathMaker: { frame in
+                    return UIBezierPath(roundedRect: frame.insetBy(dx: -8, dy: -8),
+                                      byRoundingCorners: .allCorners,
+                                      cornerRadii: CGSize(width: 8, height: 8))
+                }
+            )
+        case 1:
+            // Menu icon coach mark - using the navigation bar button's view
+            if let menuButton = navigationItem.leftBarButtonItem,
+               let menuButtonView = menuButton.value(forKey: "view") as? UIView {
+                coachMark = coachMarksController.helper.makeCoachMark(
+                    for: menuButtonView,
+                    cutoutPathMaker: { frame in
+                        return UIBezierPath(roundedRect: frame.insetBy(dx: -8, dy: -8),
+                                          byRoundingCorners: .allCorners,
+                                          cornerRadii: CGSize(width: 8, height: 8))
+                    }
+                )
+            }
+        case 2:
+            // Date scroller coach mark
+            coachMark = coachMarksController.helper.makeCoachMark(
+                for: dateScroller,
+                cutoutPathMaker: { frame in
+                    return UIBezierPath(roundedRect: frame.insetBy(dx: -8, dy: -8),
+                                      byRoundingCorners: .allCorners,
+                                      cornerRadii: CGSize(width: 8, height: 8))
+                }
+            )
+        case 3:
+            // Expense input coach mark
+            coachMark = coachMarksController.helper.makeCoachMark(
+                for: expTextField,
+                cutoutPathMaker: { frame in
+                    return UIBezierPath(roundedRect: frame.insetBy(dx: -8, dy: -8),
+                                      byRoundingCorners: .allCorners,
+                                      cornerRadii: CGSize(width: 8, height: 8))
+                }
+            )
+        case 4:
+            // Add expense button coach mark
+            coachMark = coachMarksController.helper.makeCoachMark(
+                for: addExpImageView,
+                cutoutPathMaker: { frame in
+                    return UIBezierPath(roundedRect: frame.insetBy(dx: -8, dy: -8),
+                                      byRoundingCorners: .allCorners,
+                                      cornerRadii: CGSize(width: 8, height: 8))
+                }
+            )
+        case 5:
+            // Expense item coach mark - highlight first visible cell
+            if let firstCell = expTableView.visibleCells.first {
+                coachMark = coachMarksController.helper.makeCoachMark(
+                    for: firstCell,
+                    cutoutPathMaker: { frame in
+                        return UIBezierPath(roundedRect: frame.insetBy(dx: -4, dy: -4),
+                                          byRoundingCorners: .allCorners,
+                                          cornerRadii: CGSize(width: 8, height: 8))
+                    }
+                )
+            } else {
+                // Fallback to table view if no cells are visible
+                coachMark = coachMarksController.helper.makeCoachMark(
+                    for: expTableView,
+                    cutoutPathMaker: { frame in
+                        return UIBezierPath(roundedRect: frame.insetBy(dx: -8, dy: -8),
+                                          byRoundingCorners: .allCorners,
+                                          cornerRadii: CGSize(width: 8, height: 8))
+                    }
+                )
+            }
+        default:
+            fatalError("Unexpected coach mark index: \(index)")
+        }
+        
+        // Ensure the overlay remains interactive
+        coachMark.isOverlayInteractionEnabled = true
+        
+        return coachMark
+    }
+
+    func coachMarksController(_ coachMarksController: CoachMarksController, coachMarkViewsAt index: Int, madeFrom coachMark: CoachMark) -> (bodyView: (UIView & CoachMarkBodyView), arrowView: (UIView & CoachMarkArrowView)?) {
+        let coachViews = coachMarksController.helper.makeDefaultCoachViews(withArrow: true, arrowOrientation: coachMark.arrowOrientation)
+        
+        switch index {
+        case 0:
+            coachViews.bodyView.hintLabel.text = "Tap here to switch between different expense lists"
+            coachViews.bodyView.nextLabel.text = "Next"
+        case 1:
+            coachViews.bodyView.hintLabel.text = "Tap menu to create new lists or manage existing ones"
+            coachViews.bodyView.nextLabel.text = "Next"
+        case 2:
+            coachViews.bodyView.hintLabel.text = "Scroll through dates to view expenses for different days"
+            coachViews.bodyView.nextLabel.text = "Next"
+        case 3:
+            coachViews.bodyView.hintLabel.text = "Describe your expenses like a note."
+            coachViews.bodyView.nextLabel.text = "Next"
+        case 4:
+            coachViews.bodyView.hintLabel.text = "Tap + once done describing expense."
+            coachViews.bodyView.nextLabel.text = "Next"
+        case 5:
+            coachViews.bodyView.hintLabel.text = "Tap any expense to edit or swipe to delete it"
+            coachViews.bodyView.nextLabel.text = "Done"
+        default:
+            fatalError("Unexpected coach mark index: \(index)")
+        }
+        
+        return (bodyView: coachViews.bodyView, arrowView: coachViews.arrowView)
+    }
+
+    func coachMarksController(_ coachMarksController: CoachMarksController, didEndShowingBySkipping skipped: Bool) {
+        // Handle tour completion
+        print("Tour completed. Skipped: \(skipped)")
+        // Ensure we mark that user has seen the tour even if they skipped it
+        UserDefaults.standard.set(true, forKey: hasSeenTourKey)
+    }
+    
+    private func getDefaultList() -> Lists? {
+        let lists = ListsManager.shared.fetchAllLists()
+        return lists.first { $0.name == "All Expenses" }
+    }
+
+    private func saveSelectedList(_ list: Lists) {
+        if let listName = list.name {
+            UserDefaults.standard.set(listName, forKey: selectedListKey)
+        }
+    }
+
+    private func loadSavedList() -> Lists? {
+        if let savedListName = UserDefaults.standard.string(forKey: selectedListKey) {
+            let lists = ListsManager.shared.fetchAllLists()
+            return lists.first { $0.name == savedListName }
+        }
+        return nil
+    }
+
+
 }
 
