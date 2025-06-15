@@ -33,6 +33,8 @@ class EditExpenseViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        // Track screen view
+        AnalyticsManager.shared.trackScreen("Edit Expense", screenClass: "EditExpenseViewController")
         setupUI()
         setupGestures()
         loadExpenseData()
@@ -192,6 +194,16 @@ class EditExpenseViewController: UIViewController {
               let date = selectedDate else {
             showErrorAlert(message: "Please fill all fields correctly")
             return
+        }
+        
+        // Track expense edit
+        if let oldAmount = expense.amount?.doubleValue {
+            AnalyticsManager.shared.trackExpenseEdited(
+                oldAmount: oldAmount,
+                newAmount: amount,
+                category: category.name ?? "",
+                list: listName
+            )
         }
         
         // Update expense

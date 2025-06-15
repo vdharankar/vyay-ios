@@ -76,6 +76,8 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        // Track screen view
+        AnalyticsManager.shared.trackScreen("Dashboard", screenClass: "DashboardViewController")
         print("DashboardViewController viewDidLoad started")
         
         // Store original constraint values
@@ -591,6 +593,11 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
     // MARK: - MenuViewControllerDelegate
     func menuDidSelectList(_ list: Lists) {
         print("Dashboard received selected list from menu: \(list.name ?? "")")
+        // Track list switch
+        if let oldList = selectedList?.name,
+           let newList = list.name {
+            AnalyticsManager.shared.trackListSwitched(fromList: oldList, toList: newList)
+        }
         selectedList = list
         listNameLabel.text = list.name ?? ""
         saveSelectedList(list)
@@ -763,6 +770,11 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
                                     self.fetchCategories() // Refresh categories first
                                     self.fetchExpenses() // Then refresh expenses
                                 }
+                                // Track AI expense processed
+                                AnalyticsManager.shared.trackAIExpenseProcessed(
+                                    success: true,
+                                    inputText: text
+                                )
                             } else {
                                 showErrorAlert(message: "Failed to add expense")
                             }
@@ -805,7 +817,14 @@ class DashboardViewController: UIViewController, UITableViewDelegate, UITableVie
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
-            alert.addAction(UIAlertAction(title: "Delete", style: .destructive, handler: { _ in
+            alert.addAction(UIAlertAction(title: "Delete", style: .destructive, handler: { [weak self] _ in
+                guard let self = self else { return }
+                // Track expense deletion
+                if let amount = expenseToDelete.amount?.doubleValue,
+                   let category = self.categoriesDict[expenseToDelete.catId ?? UUID()]?.name,
+                   let list = expenseToDelete.list {
+                    AnalyticsManager.shared.trackExpenseDeleted(amount: amount, category: category, list: list)
+                }
                 // Remove from Core Data (or your data source)
                 ExpenseManager.shared.deleteExpense(expense: expenseToDelete)
                 // Remove from local array
@@ -897,6 +916,8 @@ extension DashboardViewController : UICollectionViewDataSource, UICollectionView
             print("Selected date: \(dateFormatter.string(from: selectedDate))")
             dateScroller.reloadData()
             dateLabel.text = dateFormatter.string(from: selectedDate)
+            // Track date change
+            AnalyticsManager.shared.trackDateChanged(date: selectedDate)
             fetchExpenses()
         }
     }
@@ -909,6 +930,8 @@ extension DashboardViewController : UICollectionViewDataSource, UICollectionView
                 if !Calendar.current.isDate(centerDate, inSameDayAs: selectedDate) {
                     selectedDate = centerDate
                     dateLabel.text = dateFormatter.string(from: centerDate)
+                    // Track date change
+                    AnalyticsManager.shared.trackDateChanged(date: centerDate)
                     print("Scrolled to date: \(dateFormatter.string(from: centerDate))")
                     fetchExpenses()
                 }
@@ -1069,6 +1092,10 @@ extension DashboardViewController: CoachMarksControllerDataSource, CoachMarksCon
         print("Tour completed. Skipped: \(skipped)")
         // Ensure we mark that user has seen the tour even if they skipped it
         UserDefaults.standard.set(true, forKey: hasSeenTourKey)
+        // When user completes the guided tour
+        AnalyticsManager.shared.trackTourCompleted()
+        // When user skips the guided tour
+        AnalyticsManager.shared.trackTourSkipped()
     }
     
     private func getDefaultList() -> Lists? {
@@ -1090,6 +1117,19 @@ extension DashboardViewController: CoachMarksControllerDataSource, CoachMarksCon
         return nil
     }
 
+    // When adding a new expense
+    func trackExpenseAdded(amount: Double, category: String, list: String) {
+        AnalyticsManager.shared.trackExpenseAdded(amount: amount, category: category, list: list)
+    }
 
+    // When editing an expense
+    func trackExpenseEdited(oldAmount: Double, newAmount: Double, category: String, list: String) {
+        AnalyticsManager.shared.trackExpenseEdited(oldAmount: oldAmount, newAmount: newAmount, category: category, list: list)
+    }
+
+    // When deleting an expense
+    func trackExpenseDeleted(amount: Double, category: String, list: String) {
+        AnalyticsManager.shared.trackExpenseDeleted(amount: amount, category: category, list: list)
+    }
 }
 

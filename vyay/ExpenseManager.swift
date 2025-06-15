@@ -25,6 +25,14 @@ class ExpenseManager {
         do {
             try context.save()
             print("Successfully saved expense: \(details) for list: \(list)")
+            // Track expense addition
+            if let category = CategoriesManager.shared.getCategory(id: catId)?.name {
+                AnalyticsManager.shared.trackExpenseAdded(
+                    amount: amount.doubleValue,
+                    category: category,
+                    list: list
+                )
+            }
             return newExpense
         } catch {
             print("Failed to save expense: \(error)")

@@ -25,6 +25,8 @@ class MenuViewController: UIViewController, UITableViewDelegate, UITableViewData
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // Track screen view
+        AnalyticsManager.shared.trackScreen("Menu", screenClass: "MenuViewController")
         let backButton = UIBarButtonItem(image: UIImage(named: "back"), style: .plain, target: self, action: #selector(onBackTap))
         self.navigationItem.leftBarButtonItem = backButton
 
@@ -207,27 +209,32 @@ class MenuViewController: UIViewController, UITableViewDelegate, UITableViewData
     func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
         if editingStyle == .delete {
             let listToDelete = lists[indexPath.row]
-            let themeColor = UIColor(rgb:0x662CAA)
-            let latoTitle = NSAttributedString(string: "Delete List", attributes: [
-                .font: UIFont(name: "Lato-Regular", size: 18) ?? UIFont.systemFont(ofSize: 18),
-                .foregroundColor: themeColor
-            ])
-            let latoMessage = NSAttributedString(string: "Are you sure you want to delete this list and all its expenses?", attributes: [
-                .font: UIFont(name: "Lato-Regular", size: 16) ?? UIFont.systemFont(ofSize: 16),
-                .foregroundColor: UIColor.darkGray
-            ])
+            // Don't allow deletion of "All Expenses" list
+            if listToDelete.name == "All Expenses" {
+                let alert = UIAlertController(
+                    title: "Cannot Delete",
+                    message: "The 'All Expenses' list cannot be deleted.",
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                present(alert, animated: true)
+                return
+            }
+            
             let alert = UIAlertController(
-                title: "",
-                message: "",
-                preferredStyle: .actionSheet
+                title: "Delete List",
+                message: "Are you sure you want to delete this list? All expenses in this list will be deleted.",
+                preferredStyle: .alert
             )
-            alert.setValue(latoTitle, forKey: "attributedTitle")
-            alert.setValue(latoMessage, forKey: "attributedMessage")
+            
             let cancelAction = UIAlertAction(title: "Cancel", style: .cancel, handler: nil)
-            cancelAction.setValue(themeColor, forKey: "titleTextColor")
             let deleteAction = UIAlertAction(title: "Delete", style: .destructive, handler: { [weak self] _ in
                 guard let self = self else { return }
                 let wasSelectedList = (listToDelete == self.selectedList)
+                // Track list deletion
+                if let listName = listToDelete.name {
+                    AnalyticsManager.shared.trackListDeleted(listName: listName)
+                }
                 // Remove associated expenses
                 if let listName = listToDelete.name {
                     ExpenseManager.shared.deleteExpensesForList(listName: listName)
@@ -250,5 +257,57 @@ class MenuViewController: UIViewController, UITableViewDelegate, UITableViewData
             }
             present(alert, animated: true)
         }
+    }
+
+    @IBAction func addListButtonTapped(_ sender: Any) {
+        let alert = UIAlertController(
+            title: "New List",
+            message: "Enter a name for the new list",
+            preferredStyle: .alert
+        )
+        
+        alert.addTextField { textField in
+            textField.placeholder = "List Name"
+        }
+        
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
+        let addAction = UIAlertAction(title: "Add", style: .default) { [weak self] _ in
+            guard let self = self,
+                  let textField = alert.textFields?.first,
+                  let listName = textField.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !listName.isEmpty else {
+                return
+            }
+            
+            // Check if list name already exists
+            if self.lists.contains(where: { $0.name?.lowercased() == listName.lowercased() }) {
+                self.showErrorAlert(message: "A list with this name already exists")
+                return
+            }
+            
+            // Add new list
+            if ListsManager.shared.addList(name: listName, total: 0.0) != nil {
+                // Track list creation
+                AnalyticsManager.shared.trackListCreated(listName: listName)
+                self.fetchLists()
+            } else {
+                self.showErrorAlert(message: "Failed to create list")
+            }
+        }
+        
+        alert.addAction(cancelAction)
+        alert.addAction(addAction)
+        present(alert, animated: true)
+    }
+    
+    // Add the missing showErrorAlert method
+    private func showErrorAlert(message: String) {
+        let alert = UIAlertController(
+            title: "Error",
+            message: message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 }
